@@ -1,0 +1,22 @@
+{
+	"name": "git-witty",
+	"bin": {
+		"git-witty": "./src/index.ts"
+	},
+	"module": "src/index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"build": "bun build ./src/index.ts --compile --outfile dist/git-witty",
+		"check": "biome check .",
+		"format": "biome check --fix .",
+		"test": "bun test"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.6",
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
+}
