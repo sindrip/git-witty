@@ -79,6 +79,26 @@ test("clone infers repo name from url", async () => {
 	).toBe("gitdir: ./.bare\n");
 });
 
+test("clone creates a workspace file", async () => {
+	const origin = "origin";
+	const target = "my-repo";
+
+	await sh`git init ${origin}`;
+	await sh`git -C ${origin} commit --allow-empty -m "init"`;
+
+	await sh`git witty clone ${origin} ${target}`;
+
+	const branch = (
+		await sh`git -C ${target}/.bare symbolic-ref --short HEAD`.text()
+	).trim();
+
+	const wsFile = Bun.file(join(tempDir, target, `${target}.code-workspace`));
+	expect(await wsFile.exists()).toBe(true);
+
+	const workspace = await wsFile.json();
+	expect(workspace.folders).toEqual([{ path: branch }]);
+});
+
 test("clone creates worktree for non-main primary branch", async () => {
 	const origin = "origin";
 	const target = "my-repo";

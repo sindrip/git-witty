@@ -1,5 +1,6 @@
 import { basename, resolve } from "node:path";
 import { $ } from "bun";
+import { addFolder } from "../workspace";
 import { installHook } from "./init";
 
 export async function clone({ url, name }: { url: string; name?: string }) {
@@ -20,7 +21,9 @@ export async function clone({ url, name }: { url: string; name?: string }) {
 	).trim();
 
 	// Create the first worktree
-	await $`git -C ${bareDir} worktree add ${resolve(root, primaryBranch)} ${primaryBranch}`;
+	const worktreePath = resolve(root, primaryBranch);
+	await $`git -C ${bareDir} worktree add ${worktreePath}`;
+	await addFolder(root, worktreePath);
 
 	// Install git-witty hooks
 	await installHook({ bareDir });
