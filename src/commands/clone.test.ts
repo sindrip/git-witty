@@ -7,8 +7,8 @@ import { $, type ShellExpression } from "bun";
 const binDir = resolve(import.meta.dir, "../../bin");
 
 const testEnv = {
-	...process.env,
-	PATH: `${binDir}:${process.env.PATH}`,
+	...Bun.env,
+	PATH: `${binDir}:${Bun.env.PATH}`,
 	GIT_AUTHOR_NAME: "test",
 	GIT_AUTHOR_EMAIL: "test@test.com",
 	GIT_COMMITTER_NAME: "test",

@@ -1,19 +1,42 @@
-import { clone } from "./commands/clone";
+import { Command } from "commander";
+import { clone, init, protect, unprotect } from "./commands";
+import { referenceTransaction } from "./hooks";
 
-const args = process.argv.slice(2);
-const command = args[0];
+const program = new Command()
+	.name("git witty")
+	.description("Worktree-friendly git workflow tool");
 
-switch (command) {
-	case "clone":
-		await clone(args.slice(1));
-		break;
-	default:
-		console.error(
-			command ? `Unknown command: ${command}` : "Usage: git witty <command>",
-		);
-		console.error("\nCommands:");
-		console.error(
-			"  clone <url> [name]   Clone a repo into a worktree-friendly layout",
-		);
-		process.exit(1);
-}
+program
+	.command("clone")
+	.description("Clone a repo into a worktree-friendly layout")
+	.argument("<url>", "Repository URL to clone")
+	.argument("[name]", "Directory name for the clone")
+	.action((url, name) => clone({ url, name }));
+
+program
+	.command("protect")
+	.description("Protect branches from checkout in all worktrees")
+	.argument("[branches...]", "Branches to protect")
+	.action((branches) => protect({ branches }));
+
+program
+	.command("unprotect")
+	.description("Remove branch protection")
+	.argument("<branches...>", "Branches to unprotect")
+	.action((branches) => unprotect({ branches }));
+
+program
+	.command("init")
+	.description("Install git-witty hooks into the repository")
+	.action(() => init());
+
+const hook = program
+	.command("hook", { hidden: true })
+	.description("Internal hook dispatcher");
+
+hook
+	.command("reference-transaction")
+	.argument("<state>", "Transaction state")
+	.action((state) => referenceTransaction(state));
+
+program.parse();

@@ -1,14 +1,9 @@
 import { basename, resolve } from "node:path";
 import { $ } from "bun";
+import { installHook } from "./init";
 
-export async function clone(args: string[]) {
-	const url = args[0];
-	if (!url) {
-		console.error("Usage: git witty clone <url> [name]");
-		process.exit(1);
-	}
-
-	const name = args[1] ?? repoNameFromUrl(url);
+export async function clone({ url, name }: { url: string; name?: string }) {
+	name ??= repoNameFromUrl(url);
 	const root = resolve(name);
 	const bareDir = `${root}/.bare`;
 
@@ -26,6 +21,9 @@ export async function clone(args: string[]) {
 
 	// Create the first worktree
 	await $`git -C ${bareDir} worktree add ${resolve(root, primaryBranch)} ${primaryBranch}`;
+
+	// Install git-witty hooks
+	await installHook({ bareDir });
 
 	console.log(`\nReady! Created worktree layout:`);
 	console.log(`  ${name}/.bare/          (bare repo)`);
