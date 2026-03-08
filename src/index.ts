@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { clone, init, protect, unprotect } from "./commands";
+import { clone, init, list, protect, unprotect } from "./commands";
 import { referenceTransaction } from "./hooks";
 
 const program = new Command()
@@ -15,8 +15,8 @@ program
 
 program
 	.command("protect")
-	.description("Protect branches from checkout in all worktrees")
-	.argument("[branches...]", "Branches to protect")
+	.description("Protect branches from checkout")
+	.argument("<branches...>", "Branches to protect")
 	.action((branches) => protect({ branches }));
 
 program
@@ -24,6 +24,11 @@ program
 	.description("Remove branch protection")
 	.argument("<branches...>", "Branches to unprotect")
 	.action((branches) => unprotect({ branches }));
+
+program
+	.command("list")
+	.description("List worktrees with protection status")
+	.action(() => list());
 
 program
 	.command("init")

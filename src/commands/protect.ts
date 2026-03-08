@@ -1,14 +1,6 @@
 import { $ } from "bun";
 
 export async function protect({ branches }: { branches: string[] }) {
-	if (branches.length === 0) {
-		const existing = await getProtectedBranches();
-		for (const branch of existing) {
-			console.log(branch);
-		}
-		return;
-	}
-
 	const existing = await getProtectedBranches();
 
 	for (const branch of branches) {

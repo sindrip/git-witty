@@ -38,9 +38,7 @@ export async function referenceTransaction(state: string) {
 
 		if (protectedBranches.includes(currentBranch)) {
 			// Restore index and working tree before aborting — HEAD hasn't moved yet
-			const readTree = await $`git read-tree --reset -u HEAD`
-				.quiet()
-				.nothrow();
+			const readTree = await $`git read-tree --reset -u HEAD`.quiet().nothrow();
 			if (readTree.exitCode !== 0) {
 				console.error(
 					"warning: failed to restore working tree. Run 'git checkout HEAD -- .' to recover.",
