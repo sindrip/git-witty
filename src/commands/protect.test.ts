@@ -57,6 +57,7 @@ test("protect multiple branches in one command", async () => {
 	const { worktree } = await setupRepo();
 	const sh = at(worktree);
 
+	await sh`git worktree add ../develop develop`;
 	await sh`git witty protect main develop`;
 
 	const branches = (await sh`git config --get-all witty.protect`.text())
@@ -82,6 +83,7 @@ test("unprotect removes branch from config", async () => {
 	const { worktree } = await setupRepo();
 	const sh = at(worktree);
 
+	await sh`git worktree add ../develop develop`;
 	await sh`git witty protect main`;
 	await sh`git witty protect develop`;
 	await sh`git witty unprotect main`;
@@ -98,7 +100,7 @@ test("protect non-existent branch fails", async () => {
 
 	const result = await sh`git witty protect nope`.nothrow();
 	expect(result.exitCode).not.toBe(0);
-	expect(result.stderr.toString()).toContain("does not exist");
+	expect(result.stderr.toString()).toContain("not checked out");
 });
 
 test("unprotect non-protected branch fails", async () => {

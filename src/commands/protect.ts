@@ -3,12 +3,19 @@ import { $ } from "bun";
 export async function protect({ branches }: { branches: string[] }) {
 	const existing = await getProtectedBranches();
 
+	const worktreeOutput = (
+		await $`git worktree list --porcelain`.quiet().nothrow().text()
+	).trim();
+	const checkedOutBranches = new Set(
+		worktreeOutput
+			.split("\n")
+			.filter((line) => line.startsWith("branch refs/heads/"))
+			.map((line) => line.slice("branch refs/heads/".length)),
+	);
+
 	for (const branch of branches) {
-		const { exitCode } = await $`git rev-parse --verify refs/heads/${branch}`
-			.quiet()
-			.nothrow();
-		if (exitCode !== 0) {
-			console.error(`Branch '${branch}' does not exist.`);
+		if (!checkedOutBranches.has(branch)) {
+			console.error(`Branch '${branch}' is not checked out in any worktree.`);
 			process.exit(1);
 		}
 

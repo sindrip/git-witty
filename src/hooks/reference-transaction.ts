@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { $ } from "bun";
 import { getProtectedBranches } from "../commands/protect";
 
@@ -36,14 +38,18 @@ export async function referenceTransaction(state: string) {
 			continue;
 		}
 
+		// During git worktree add, a new worktree directory is created under
+		// .bare/worktrees/ before the HEAD transaction fires, but it won't have
+		// a HEAD file yet (this transaction is what creates it). If we detect
+		// such a directory, the HEAD update is for the new worktree, not ours.
+		if (await isWorktreeBeingCreated()) {
+			continue;
+		}
+
 		if (protectedBranches.includes(currentBranch)) {
-			// Restore index and working tree before aborting — HEAD hasn't moved yet
-			const readTree = await $`git read-tree --reset -u HEAD`.quiet().nothrow();
-			if (readTree.exitCode !== 0) {
-				console.error(
-					"warning: failed to restore working tree. Run 'git checkout HEAD -- .' to recover.",
-				);
-			}
+			// Reset index to HEAD without touching the working tree (-u omitted).
+			// Git's own rollback handles the working tree; we just fix the index.
+			await $`git read-tree --reset HEAD`.quiet().nothrow();
 
 			console.error(
 				`error: branch '${currentBranch}' is protected by git-witty.`,
@@ -54,4 +60,33 @@ export async function referenceTransaction(state: string) {
 			process.exit(1);
 		}
 	}
+}
+
+async function isWorktreeBeingCreated(): Promise<boolean> {
+	const commonDir = (
+		await $`git rev-parse --git-common-dir`.quiet().nothrow().text()
+	).trim();
+	const worktreesDir = resolve(commonDir, "worktrees");
+	const gitDir = resolve(
+		(await $`git rev-parse --git-dir`.quiet().nothrow().text()).trim(),
+	);
+
+	if (!existsSync(worktreesDir)) {
+		return false;
+	}
+
+	for (const entry of readdirSync(worktreesDir, { withFileTypes: true })) {
+		if (!entry.isDirectory()) {
+			continue;
+		}
+		const wtDir = resolve(worktreesDir, entry.name);
+		if (wtDir === gitDir) {
+			continue;
+		}
+		if (!existsSync(resolve(wtDir, "HEAD"))) {
+			return true;
+		}
+	}
+
+	return false;
 }
