@@ -1,7 +1,7 @@
 {
 	"name": "git-witty",
 	"bin": {
-		"git-witty": "./src/index.ts"
+		"git-witty": "dist/git-witty"
 	},
 	"module": "src/index.ts",
 	"type": "module",

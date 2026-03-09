@@ -4,13 +4,21 @@ import { addFolder } from "../workspace";
 import { installHook } from "./init";
 
 export async function clone({ url, name }: { url: string; name?: string }) {
-	name ??= repoNameFromUrl(url);
+	const repoName = repoNameFromUrl(url);
+	name ??= repoName;
 	const root = resolve(name);
 	const bareDir = `${root}/.bare`;
 
 	// Clone as bare repo
 	console.log(`Cloning ${url} into ${root}...`);
 	await $`git clone --bare ${url} ${bareDir}`;
+
+	// Bare clones need this to fetch all branches
+	await $`git -C ${bareDir} config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"`;
+	await $`git -C ${bareDir} fetch origin`;
+
+	// Make the setup portable (can move the folder)
+	await $`git -C ${bareDir} config worktree.useRelativePaths true`;
 
 	// Create .git file pointing to the bare repo
 	await Bun.write(`${root}/.git`, "gitdir: ./.bare\n");
@@ -23,7 +31,8 @@ export async function clone({ url, name }: { url: string; name?: string }) {
 	// Create the first worktree
 	const worktreePath = resolve(root, primaryBranch);
 	await $`git -C ${bareDir} worktree add ${worktreePath}`;
-	await addFolder(root, worktreePath);
+	await $`git -C ${worktreePath} branch --set-upstream-to=origin/${primaryBranch}`;
+	await addFolder(root, repoName, worktreePath);
 
 	// Install git-witty hooks
 	await installHook({ bareDir });

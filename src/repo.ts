@@ -1,4 +1,4 @@
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { $ } from "bun";
 
 /**
@@ -9,4 +9,12 @@ export async function getRepoRoot(): Promise<string> {
 
 	// gitCommonDir points to .bare — the repo root is its parent
 	return dirname(gitCommonDir);
+}
+
+/**
+ * Returns the repository name derived from the remote origin URL.
+ */
+export async function getRepoName(): Promise<string> {
+	const url = (await $`git remote get-url origin`.text()).trim();
+	return basename(url).replace(/\.git$/, "");
 }
