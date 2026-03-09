@@ -17,6 +17,9 @@ export async function clone({ url, name }: { url: string; name?: string }) {
 	await $`git -C ${bareDir} config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"`;
 	await $`git -C ${bareDir} fetch origin`;
 
+	// Enable reflogs (bare repos don't set this by default)
+	await $`git -C ${bareDir} config core.logAllRefUpdates true`;
+
 	// Make the setup portable (can move the folder)
 	await $`git -C ${bareDir} config worktree.useRelativePaths true`;
 
