@@ -92,7 +92,7 @@ test("clone creates a workspace file", async () => {
 		await sh`git -C ${target}/.bare symbolic-ref --short HEAD`.text()
 	).trim();
 
-	const wsFile = Bun.file(join(tempDir, target, `${target}.code-workspace`));
+	const wsFile = Bun.file(join(tempDir, target, `${origin}.code-workspace`));
 	expect(await wsFile.exists()).toBe(true);
 
 	const workspace = await wsFile.json();

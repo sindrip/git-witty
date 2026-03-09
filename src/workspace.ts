@@ -1,4 +1,4 @@
-import { basename, relative } from "node:path";
+import { relative } from "node:path";
 
 interface WorkspaceFolder {
 	path: string;
@@ -9,8 +9,8 @@ interface WorkspaceFile {
 	[key: string]: unknown;
 }
 
-export function workspacePath(root: string): string {
-	return `${root}/${basename(root)}.code-workspace`;
+export function workspacePath(root: string, repoName: string): string {
+	return `${root}/${repoName}.code-workspace`;
 }
 
 async function read(path: string): Promise<WorkspaceFile> {
@@ -27,9 +27,10 @@ async function write(path: string, workspace: WorkspaceFile): Promise<void> {
 
 export async function addFolder(
 	root: string,
+	repoName: string,
 	worktreePath: string,
 ): Promise<void> {
-	const wsPath = workspacePath(root);
+	const wsPath = workspacePath(root, repoName);
 	const workspace = await read(wsPath);
 
 	const rel = relative(root, worktreePath);
@@ -44,9 +45,10 @@ export async function addFolder(
 
 export async function removeFolder(
 	root: string,
+	repoName: string,
 	worktreePath: string,
 ): Promise<void> {
-	const wsPath = workspacePath(root);
+	const wsPath = workspacePath(root, repoName);
 	const workspace = await read(wsPath);
 
 	const rel = relative(root, worktreePath);
