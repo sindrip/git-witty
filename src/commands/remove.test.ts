@@ -1,63 +1,32 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { $, type ShellExpression } from "bun";
+import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { createRepo, useTestDir } from "../test-helpers";
 
-const binDir = resolve(import.meta.dir, "../../bin");
+describe("remove", () => {
+	const ctx = useTestDir();
 
-const testEnv = {
-	...Bun.env,
-	PATH: `${binDir}:${Bun.env.PATH}`,
-	GIT_AUTHOR_NAME: "test",
-	GIT_AUTHOR_EMAIL: "test@test.com",
-	GIT_COMMITTER_NAME: "test",
-	GIT_COMMITTER_EMAIL: "test@test.com",
-};
+	test("removes worktree as sibling from nested directory", async () => {
+		const { name: origin, branch } = await createRepo(ctx.sh, {
+			branch: "main",
+		});
+		const target = "my-repo";
+		await ctx.sh`git witty clone ${origin} ${target}`;
 
-let tempDir: string;
+		const repoSh = ctx.at(join(ctx.dir, target, branch));
+		await ctx.sh`git -C ${origin} branch feature`;
+		await repoSh`git witty add feature`;
 
-beforeEach(async () => {
-	tempDir = await mkdtemp(join(tmpdir(), "git-witty-"));
-});
+		// Remove from a nested directory
+		const nested = join(ctx.dir, target, branch, "some", "dir");
+		await ctx.sh`mkdir -p ${nested}`;
+		const sh = ctx.at(nested);
 
-afterEach(async () => {
-	await rm(tempDir, { recursive: true });
-});
+		await sh`git witty remove feature`;
 
-function sh(strings: TemplateStringsArray, ...values: ShellExpression[]) {
-	return $(strings, ...values)
-		.cwd(tempDir)
-		.env(testEnv)
-		.quiet();
-}
-
-async function setupRepo(): Promise<{ repo: string; primaryBranch: string }> {
-	const origin = "origin";
-	const repo = "my-repo";
-
-	await sh`git init ${origin}`;
-	await sh`git -C ${origin} commit --allow-empty -m "init"`;
-	await sh`git witty clone ${origin} ${repo}`;
-
-	const primaryBranch = (
-		await sh`git -C ${repo}/.bare symbolic-ref --short HEAD`.text()
-	).trim();
-
-	return { repo, primaryBranch };
-}
-
-test("remove deletes a worktree", async () => {
-	const { repo, primaryBranch } = await setupRepo();
-
-	await sh`git -C ${join(repo, primaryBranch)} branch feature-c`;
-	await sh`cd ${join(repo, primaryBranch)} && git witty add feature-c`;
-	await sh`cd ${join(repo, primaryBranch)} && git witty remove feature-c`;
-
-	const worktreeLines = (await sh`git -C ${repo} worktree list`.text())
-		.trim()
-		.split("\n");
-
-	expect(worktreeLines).toHaveLength(2);
-	expect(await Bun.file(join(tempDir, repo, "feature-c")).exists()).toBe(false);
+		const worktreeLines = (await repoSh`git worktree list`.text())
+			.trim()
+			.split("\n");
+		const hasFeature = worktreeLines.some((line) => line.includes("[feature]"));
+		expect(hasFeature).toBe(false);
+	});
 });

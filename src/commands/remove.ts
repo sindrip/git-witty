@@ -1,13 +1,10 @@
-import { join } from "node:path";
-import { $ } from "bun";
-import { getRepoName, getRepoRoot } from "../repo";
-import { removeFolder } from "../workspace";
+import { basename } from "node:path";
+import { Git } from "../git";
+import { syncWorkspace } from "../workspace";
 
-export async function remove({ branch }: { branch: string }) {
-	const root = await getRepoRoot();
-	const repoName = await getRepoName();
-	const worktreePath = join(root, branch);
-
-	await $`git worktree remove ${worktreePath}`;
-	await removeFolder(root, repoName, worktreePath);
+export async function remove(branch: string) {
+	const git = await new Git().root();
+	const root = await git.rootDir();
+	await git.worktree("remove", branch);
+	await syncWorkspace(root, basename(root));
 }

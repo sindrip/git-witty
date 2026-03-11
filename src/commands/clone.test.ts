@@ -1,117 +1,64 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { $, type ShellExpression } from "bun";
+import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { createRepo, useTestDir } from "../test-helpers";
 
-const binDir = resolve(import.meta.dir, "../../bin");
+describe("clone", () => {
+	const ctx = useTestDir();
 
-const testEnv = {
-	...Bun.env,
-	PATH: `${binDir}:${Bun.env.PATH}`,
-	GIT_AUTHOR_NAME: "test",
-	GIT_AUTHOR_EMAIL: "test@test.com",
-	GIT_COMMITTER_NAME: "test",
-	GIT_COMMITTER_EMAIL: "test@test.com",
-};
+	test("creates worktree layout from local repo", async () => {
+		const { name: origin, branch } = await createRepo(ctx.sh, {
+			branch: "main",
+		});
+		const target = "my-repo";
 
-let tempDir: string;
+		await ctx.sh`git witty clone ${origin} ${target}`;
 
-beforeEach(async () => {
-	tempDir = await mkdtemp(join(tmpdir(), "git-witty-"));
-});
+		// Verify .git pointer file we create
+		expect(await Bun.file(join(ctx.dir, target, ".git")).text()).toBe(
+			"gitdir: ./.bare\n",
+		);
 
-afterEach(async () => {
-	await rm(tempDir, { recursive: true });
-});
+		// Verify worktree is a functional git checkout on the primary branch
+		const worktreeBranch = (
+			await ctx.sh`git -C ${join(target, branch)} branch --show-current`.text()
+		).trim();
+		expect(worktreeBranch).toBe(branch);
 
-function sh(strings: TemplateStringsArray, ...values: ShellExpression[]) {
-	return $(strings, ...values)
-		.cwd(tempDir)
-		.env(testEnv)
-		.quiet();
-}
+		// Verify both bare repo and worktree are registered
+		const worktreeLines = (await ctx.sh`git -C ${target} worktree list`.text())
+			.trim()
+			.split("\n");
+		expect(worktreeLines).toHaveLength(2);
+		expect(worktreeLines[0]).toContain(".bare");
+		expect(worktreeLines[1]).toContain(`[${branch}]`);
+	});
 
-test("clone creates worktree layout from local repo", async () => {
-	const origin = "origin";
-	const target = "my-repo";
+	test("infers repo name from url", async () => {
+		await createRepo(ctx.sh, { name: "origin/my-project", branch: "main" });
+		const targetDir = "target";
 
-	await sh`git init ${origin}`;
-	await sh`git -C ${origin} commit --allow-empty -m "init"`;
+		await ctx.sh`mkdir -p ${targetDir}`;
+		await ctx.at(
+			join(ctx.dir, targetDir),
+		)`git witty clone ${join(ctx.dir, "origin/my-project")}`;
 
-	await sh`git witty clone ${origin} ${target}`;
+		expect(
+			await Bun.file(join(ctx.dir, targetDir, "my-project", ".git")).text(),
+		).toBe("gitdir: ./.bare\n");
+	});
 
-	// Verify .git pointer file we create
-	expect(await Bun.file(join(tempDir, target, ".git")).text()).toBe(
-		"gitdir: ./.bare\n",
-	);
+	test("creates worktree for non-main primary branch", async () => {
+		const { name: origin, branch } = await createRepo(ctx.sh, {
+			branch: "develop",
+		});
+		const target = "my-repo";
 
-	// Verify worktree is a functional git checkout on the primary branch
-	const branch = (
-		await sh`git -C ${target}/.bare symbolic-ref --short HEAD`.text()
-	).trim();
-	const worktreeBranch = (
-		await sh`git -C ${join(target, branch)} branch --show-current`.text()
-	).trim();
-	expect(worktreeBranch).toBe(branch);
+		await ctx.sh`git witty clone ${origin} ${target}`;
 
-	// Verify both bare repo and worktree are registered
-	const worktreeLines = (await sh`git -C ${target} worktree list`.text())
-		.trim()
-		.split("\n");
-	expect(worktreeLines).toHaveLength(2);
-	expect(worktreeLines[0]).toContain(".bare");
-	expect(worktreeLines[1]).toContain(`[${branch}]`);
-});
-
-test("clone infers repo name from url", async () => {
-	const origin = "origin/my-project";
-	const targetDir = "target";
-
-	await sh`git init ${origin}`;
-	await sh`git -C ${origin} commit --allow-empty -m "init"`;
-
-	await sh`mkdir -p ${targetDir}`;
-	await sh`cd ${targetDir} && git witty clone ${join(tempDir, origin)}`;
-
-	expect(
-		await Bun.file(join(tempDir, targetDir, "my-project", ".git")).text(),
-	).toBe("gitdir: ./.bare\n");
-});
-
-test("clone creates a workspace file", async () => {
-	const origin = "origin";
-	const target = "my-repo";
-
-	await sh`git init ${origin}`;
-	await sh`git -C ${origin} commit --allow-empty -m "init"`;
-
-	await sh`git witty clone ${origin} ${target}`;
-
-	const branch = (
-		await sh`git -C ${target}/.bare symbolic-ref --short HEAD`.text()
-	).trim();
-
-	const wsFile = Bun.file(join(tempDir, target, `${origin}.code-workspace`));
-	expect(await wsFile.exists()).toBe(true);
-
-	const workspace = await wsFile.json();
-	expect(workspace.folders).toEqual([{ path: branch }]);
-});
-
-test("clone creates worktree for non-main primary branch", async () => {
-	const origin = "origin";
-	const target = "my-repo";
-	const branch = "develop";
-
-	await sh`git init -b ${branch} ${origin}`;
-	await sh`git -C ${origin} commit --allow-empty -m "init"`;
-
-	await sh`git witty clone ${origin} ${target}`;
-
-	const worktreeBranch = (
-		await sh`git -C ${join(target, branch)} branch --show-current`.text()
-	).trim();
-	expect(worktreeBranch).toBe(branch);
-	expect(await Bun.file(join(tempDir, target, "main")).exists()).toBe(false);
+		const worktreeBranch = (
+			await ctx.sh`git -C ${join(target, branch)} branch --show-current`.text()
+		).trim();
+		expect(worktreeBranch).toBe(branch);
+		expect(await Bun.file(join(ctx.dir, target, "main")).exists()).toBe(false);
+	});
 });

@@ -1,113 +1,96 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { $, type ShellExpression } from "bun";
+import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
+import { Git } from "../git";
+import { createRepo, useTestDir } from "../test-helpers";
+import { syncProtected } from "./protect";
 
-const binDir = resolve(import.meta.dir, "../../bin");
+describe("syncProtected", () => {
+	const ctx = useTestDir();
 
-const testEnv = {
-	...Bun.env,
-	PATH: `${binDir}:${Bun.env.PATH}`,
-	GIT_AUTHOR_NAME: "test",
-	GIT_AUTHOR_EMAIL: "test@test.com",
-	GIT_COMMITTER_NAME: "test",
-	GIT_COMMITTER_EMAIL: "test@test.com",
-};
+	async function setup() {
+		const { name: origin, branch } = await createRepo(ctx.sh, {
+			branch: "main",
+		});
+		const target = "my-repo";
+		await ctx.sh`git witty clone ${origin} ${target}`;
+		const dir = join(ctx.dir, target, branch);
+		const git = await new Git(["-C", dir]).root();
+		return git.config;
+	}
 
-let tempDir: string;
+	test("adds newly selected branches", async () => {
+		const config = await setup();
 
-beforeEach(async () => {
-	tempDir = await mkdtemp(join(tmpdir(), "git-witty-"));
+		await syncProtected([], ["main", "release"], config);
+
+		const result = await config.getAll("witty.protect");
+		expect(result).toEqual(["main", "release"]);
+	});
+
+	test("removes deselected branches", async () => {
+		const config = await setup();
+		await config.add("witty.protect", "main");
+		await config.add("witty.protect", "release");
+
+		await syncProtected(["main", "release"], ["release"], config);
+
+		const result = await config.getAll("witty.protect");
+		expect(result).toEqual(["release"]);
+	});
+
+	test("handles mixed adds and removes", async () => {
+		const config = await setup();
+		await config.add("witty.protect", "main");
+
+		await syncProtected(["main"], ["release"], config);
+
+		const result = await config.getAll("witty.protect");
+		expect(result).toEqual(["release"]);
+	});
+
+	test("no-op when selection unchanged", async () => {
+		const config = await setup();
+		await config.add("witty.protect", "main");
+
+		await syncProtected(["main"], ["main"], config);
+
+		const result = await config.getAll("witty.protect");
+		expect(result).toEqual(["main"]);
+	});
 });
 
-afterEach(async () => {
-	await rm(tempDir, { recursive: true });
-});
+describe("listWorktrees", () => {
+	const ctx = useTestDir();
 
-function at(cwd: string) {
-	return (strings: TemplateStringsArray, ...values: ShellExpression[]) =>
-		$(strings, ...values)
-			.cwd(cwd)
-			.env(testEnv)
-			.quiet();
-}
+	test("returns branch names from worktrees", async () => {
+		const { name: origin, branch } = await createRepo(ctx.sh, {
+			branch: "main",
+		});
+		const target = "my-repo";
+		await ctx.sh`git witty clone ${origin} ${target}`;
+		const sh = ctx.at(join(ctx.dir, target, branch));
+		await ctx.sh`git -C ${origin} branch feature`;
+		await sh`git witty add feature`;
 
-async function setupRepo() {
-	const sh = at(tempDir);
-	await sh`git init -b main origin`;
-	await sh`git -C origin commit --allow-empty -m "init"`;
-	await sh`git -C origin branch develop`;
-	await sh`git witty clone origin my-repo`;
-	const worktree = join(tempDir, "my-repo", "main");
-	return { worktree };
-}
+		const git = await new Git(["-C", join(ctx.dir, target, branch)]).root();
+		const worktrees = await git.listWorktrees();
+		const branches = worktrees.map((w) => w.branch);
 
-test("protect adds branch to config", async () => {
-	const { worktree } = await setupRepo();
-	const sh = at(worktree);
+		expect(branches).toContain(branch);
+		expect(branches).toContain("feature");
+	});
 
-	await sh`git witty protect main`;
+	test("skips bare entry", async () => {
+		const { branch } = await createRepo(ctx.sh, { branch: "main" });
+		const target = "my-repo";
+		await ctx.sh`git witty clone origin ${target}`;
 
-	const branches = (await sh`git config --get-all witty.protect`.text()).trim();
-	expect(branches).toBe("main");
-});
+		const git = await new Git(["-C", join(ctx.dir, target, branch)]).root();
+		const worktrees = await git.listWorktrees();
 
-test("protect multiple branches in one command", async () => {
-	const { worktree } = await setupRepo();
-	const sh = at(worktree);
-
-	await sh`git worktree add ../develop develop`;
-	await sh`git witty protect main develop`;
-
-	const branches = (await sh`git config --get-all witty.protect`.text())
-		.trim()
-		.split("\n");
-	expect(branches).toEqual(["main", "develop"]);
-});
-
-test("protect is idempotent", async () => {
-	const { worktree } = await setupRepo();
-	const sh = at(worktree);
-
-	await sh`git witty protect main`;
-	await sh`git witty protect main`;
-
-	const branches = (await sh`git config --get-all witty.protect`.text())
-		.trim()
-		.split("\n");
-	expect(branches).toEqual(["main"]);
-});
-
-test("unprotect removes branch from config", async () => {
-	const { worktree } = await setupRepo();
-	const sh = at(worktree);
-
-	await sh`git worktree add ../develop develop`;
-	await sh`git witty protect main`;
-	await sh`git witty protect develop`;
-	await sh`git witty unprotect main`;
-
-	const branches = (await sh`git config --get-all witty.protect`.text())
-		.trim()
-		.split("\n");
-	expect(branches).toEqual(["develop"]);
-});
-
-test("protect non-existent branch fails", async () => {
-	const { worktree } = await setupRepo();
-	const sh = at(worktree);
-
-	const result = await sh`git witty protect nope`.nothrow();
-	expect(result.exitCode).not.toBe(0);
-	expect(result.stderr.toString()).toContain("not checked out");
-});
-
-test("unprotect non-protected branch fails", async () => {
-	const { worktree } = await setupRepo();
-	const sh = at(worktree);
-
-	const result = await sh`git witty unprotect main`.nothrow();
-	expect(result.exitCode).not.toBe(0);
-	expect(result.stderr.toString()).toContain("not protected");
+		// Should not contain any empty strings or bare-related entries
+		for (const w of worktrees) {
+			expect(w.branch.length).toBeGreaterThan(0);
+		}
+	});
 });
