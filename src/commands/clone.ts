@@ -1,5 +1,5 @@
 import { basename, join, resolve } from "node:path";
-import { Git } from "../git";
+import { BARE_DIR, GITDIR_POINTER, Git } from "../git";
 import { installHook } from "../hooks";
 import { syncWorkspace } from "../workspace";
 
@@ -18,7 +18,7 @@ export async function clone({
 }): Promise<CloneResult> {
 	name ??= basename(url).replace(/\.git$/, "");
 	const root = resolve(name);
-	const bareDir = join(root, ".bare");
+	const bareDir = join(root, BARE_DIR);
 	const git = new Git();
 
 	await git.clone(url, bareDir);
@@ -32,7 +32,7 @@ export async function clone({
 	await bare.config.set("core.logAllRefUpdates", "true");
 	await bare.config.set("worktree.useRelativePaths", "true");
 
-	await Bun.write(join(root, ".git"), "gitdir: ./.bare\n");
+	await Bun.write(join(root, ".git"), GITDIR_POINTER);
 
 	const primaryBranch = (
 		await bare.exec("symbolic-ref", "--short", "HEAD").text()

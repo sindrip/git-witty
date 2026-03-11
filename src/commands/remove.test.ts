@@ -26,7 +26,13 @@ describe("remove", () => {
 		const worktreeLines = (await repoSh`git worktree list`.text())
 			.trim()
 			.split("\n");
-		const hasFeature = worktreeLines.some((line) => line.includes("[feature]"));
-		expect(hasFeature).toBe(false);
+		expect(worktreeLines).toHaveLength(2);
+		expect(worktreeLines.some((line) => line.includes("[feature]"))).toBe(
+			false,
+		);
+
+		// Directory should also be removed from disk
+		const featureDir = join(ctx.dir, target, "feature");
+		expect(await Bun.file(featureDir).exists()).toBe(false);
 	});
 });

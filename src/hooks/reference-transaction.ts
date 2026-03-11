@@ -1,4 +1,4 @@
-import { Git } from "../git";
+import { Git, PROTECT_CONFIG_KEY } from "../git";
 
 const NULL_SHA = "0000000000000000000000000000000000000000";
 
@@ -6,7 +6,7 @@ export async function referenceTransaction(state: string) {
 	if (state !== "prepared") return;
 
 	const git = await new Git().root();
-	const protectedBranches = await git.config.getAll("witty.protect");
+	const protectedBranches = await git.config.getAll(PROTECT_CONFIG_KEY);
 	if (protectedBranches.length === 0) return;
 
 	const input = await Bun.stdin.text();

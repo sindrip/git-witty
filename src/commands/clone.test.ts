@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { BARE_DIR, GITDIR_POINTER } from "../git";
 import { createRepo, useTestDir } from "../test-helpers";
 
 describe("clone", () => {
@@ -15,7 +16,7 @@ describe("clone", () => {
 
 		// Verify .git pointer file we create
 		expect(await Bun.file(join(ctx.dir, target, ".git")).text()).toBe(
-			"gitdir: ./.bare\n",
+			GITDIR_POINTER,
 		);
 
 		// Verify worktree is a functional git checkout on the primary branch
@@ -29,7 +30,7 @@ describe("clone", () => {
 			.trim()
 			.split("\n");
 		expect(worktreeLines).toHaveLength(2);
-		expect(worktreeLines[0]).toContain(".bare");
+		expect(worktreeLines[0]).toContain(BARE_DIR);
 		expect(worktreeLines[1]).toContain(`[${branch}]`);
 	});
 
@@ -44,7 +45,20 @@ describe("clone", () => {
 
 		expect(
 			await Bun.file(join(ctx.dir, targetDir, "my-project", ".git")).text(),
-		).toBe("gitdir: ./.bare\n");
+		).toBe(GITDIR_POINTER);
+	});
+
+	test("creates a workspace file", async () => {
+		const { name: origin, branch } = await createRepo(ctx.sh, {
+			branch: "main",
+		});
+		const target = "my-repo";
+
+		await ctx.sh`git witty clone ${origin} ${target}`;
+
+		const wsPath = join(ctx.dir, target, `${target}.code-workspace`);
+		const workspace = await Bun.file(wsPath).json();
+		expect(workspace.folders).toEqual([{ path: branch }]);
 	});
 
 	test("creates worktree for non-main primary branch", async () => {

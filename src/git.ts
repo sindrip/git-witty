@@ -1,5 +1,9 @@
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { $ } from "bun";
+
+export const BARE_DIR = ".bare";
+export const GITDIR_POINTER = `gitdir: ./${BARE_DIR}\n`;
+export const PROTECT_CONFIG_KEY = "witty.protect";
 
 export class GitConfig {
 	#git: Git;
@@ -76,6 +80,11 @@ export class Git {
 		return new GitConfig(this);
 	}
 
+	async repoName(): Promise<string> {
+		const url = (await this.exec("remote", "get-url", "origin").text()).trim();
+		return basename(url).replace(/\.git$/, "");
+	}
+
 	clone(url: string, dir: string) {
 		return $`git ${this.#flags} clone --bare ${url} ${dir}`;
 	}
@@ -89,7 +98,7 @@ export class Git {
 		const entries = result.text().split("\n\n");
 		const worktrees: { branch: string; path: string }[] = [];
 		for (const entry of entries) {
-			if (entry.includes("bare")) continue;
+			if (entry.includes(BARE_DIR)) continue;
 			const branchMatch = entry.match(/^branch refs\/heads\/(.+)$/m);
 			const pathMatch = entry.match(/^worktree (.+)$/m);
 			if (branchMatch?.[1] && pathMatch?.[1]) {
