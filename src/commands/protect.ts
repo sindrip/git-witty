@@ -1,52 +1,47 @@
-import { $ } from "bun";
+import * as p from "@clack/prompts";
+import { Git, type GitConfig, PROTECT_CONFIG_KEY } from "../git";
 
-export async function protect({ branches }: { branches: string[] }) {
-	const existing = await getProtectedBranches();
+export async function syncProtected(
+	current: string[],
+	selected: string[],
+	config: GitConfig,
+) {
+	const toAdd = selected.filter((b) => !current.includes(b));
+	const toRemove = current.filter((b) => !selected.includes(b));
 
-	const worktreeOutput = (
-		await $`git worktree list --porcelain`.quiet().nothrow().text()
-	).trim();
-	const checkedOutBranches = new Set(
-		worktreeOutput
-			.split("\n")
-			.filter((line) => line.startsWith("branch refs/heads/"))
-			.map((line) => line.slice("branch refs/heads/".length)),
-	);
-
-	for (const branch of branches) {
-		if (!checkedOutBranches.has(branch)) {
-			console.error(`Branch '${branch}' is not checked out in any worktree.`);
-			process.exit(1);
-		}
-
-		if (existing.includes(branch)) {
-			continue;
-		}
-
-		await $`git config --add witty.protect ${branch}`;
-		existing.push(branch);
-		console.log(`Protected branch: ${branch}`);
+	for (const branch of toAdd) {
+		await config.add(PROTECT_CONFIG_KEY, branch);
+	}
+	for (const branch of toRemove) {
+		await config.unset(PROTECT_CONFIG_KEY, `^${branch}$`);
 	}
 }
 
-export async function unprotect({ branches }: { branches: string[] }) {
-	const existing = await getProtectedBranches();
+export async function protect() {
+	const git = await new Git().root();
+	const branches = await git.listBranches();
+	const currentProtected = await git.config.getAll(PROTECT_CONFIG_KEY);
 
-	for (const branch of branches) {
-		if (!existing.includes(branch)) {
-			console.error(`Branch '${branch}' is not protected.`);
-			process.exit(1);
-		}
+	const selected = await p.multiselect({
+		message: "Select branches to protect",
+		options: [...branches]
+			.sort((a, b) => {
+				const aP = currentProtected.includes(a) ? 0 : 1;
+				const bP = currentProtected.includes(b) ? 0 : 1;
+				return aP - bP;
+			})
+			.map((b) => ({
+				value: b,
+				label: b,
+			})),
+		initialValues: currentProtected,
+		required: false,
+	});
 
-		await $`git config --unset witty.protect ${branch}`;
+	if (p.isCancel(selected)) {
+		p.cancel("No changes made.");
+		process.exit(0);
 	}
-}
 
-export async function getProtectedBranches(): Promise<string[]> {
-	try {
-		const result = (await $`git config --get-all witty.protect`.text()).trim();
-		return result ? result.split("\n") : [];
-	} catch {
-		return [];
-	}
+	await syncProtected(currentProtected, selected, git.config);
 }
