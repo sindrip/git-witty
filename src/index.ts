@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { add, clone, protect, remove } from "./commands";
 import { Git } from "./git";
-import { referenceTransaction } from "./hooks";
+import { hooks } from "./hooks";
 
 const program = new Command()
 	.name("git witty")
@@ -48,11 +48,18 @@ program
 		await remove(branch);
 	});
 
-const hook = program.command("hook", { hidden: true });
-hook
-	.command("reference-transaction")
-	.argument("<state>")
-	.action((state: string) => referenceTransaction(state));
+program
+	.command("hook", { hidden: true })
+	.argument("<name>")
+	.allowExcessArguments()
+	.action(async (name: string, _options, command) => {
+		const handler = hooks[name];
+		if (!handler) {
+			console.error(`Unknown hook: ${name}`);
+			process.exit(1);
+		}
+		await handler(...(command.args.slice(1) as string[]));
+	});
 
 const passthroughCommands = [
 	"list",

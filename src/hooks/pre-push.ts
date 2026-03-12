@@ -1,22 +1,20 @@
-import { Git, NULL_SHA, PROTECT_CONFIG_KEY } from "../git";
+import { Git, PROTECT_CONFIG_KEY } from "../git";
 
-export async function referenceTransaction(state: string) {
-	if (state !== "prepared") return;
-
+export async function prePush(_remote: string, _url: string) {
 	const git = await new Git().root();
 	const protectedBranches = await git.config.getAll(PROTECT_CONFIG_KEY);
 	if (protectedBranches.length === 0) return;
 
 	const input = await Bun.stdin.text();
 	for (const line of input.trim().split("\n")) {
-		const [, newValue, ref] = line.split(" ");
-		if (newValue !== NULL_SHA) continue;
-		if (!ref?.startsWith("refs/heads/")) continue;
+		if (!line) continue;
+		const [localRef] = line.split(" ");
+		if (!localRef?.startsWith("refs/heads/")) continue;
 
-		const branch = ref.slice("refs/heads/".length);
+		const branch = localRef.slice("refs/heads/".length);
 		if (protectedBranches.includes(branch)) {
 			console.error(
-				`error: deletion of branch '${branch}' is blocked by git-witty.`,
+				`error: push to protected branch '${branch}' is blocked by git-witty.`,
 			);
 			console.error("Run 'git witty protect' to manage protected branches.");
 			process.exit(1);
