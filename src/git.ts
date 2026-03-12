@@ -3,6 +3,7 @@ import { $ } from "bun";
 
 export const BARE_DIR = ".bare";
 export const GITDIR_POINTER = `gitdir: ./${BARE_DIR}\n`;
+export const NULL_SHA = "0000000000000000000000000000000000000000";
 export const PROTECT_CONFIG_KEY = "witty.protect";
 
 export class GitConfig {
